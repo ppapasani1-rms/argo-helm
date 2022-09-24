@@ -86,7 +86,7 @@ controller:
   # podPortName: http
   metricsConfig:
     # -- Enables prometheus metrics server
-    enabled: false
+    enabled: true
     # -- Path is the path where metrics are emitted. Must start with a "/".
     path: /metrics
     # -- Port is the port where metrics are emitted
@@ -113,25 +113,25 @@ controller:
         - ALL
   # -- enable persistence using postgres
   persistence: {}
-  # connectionPool:
-  #   maxIdleConns: 100
-  #   maxOpenConns: 0
-  # # save the entire workflow into etcd and DB
-  # nodeStatusOffLoad: false
-  # # enable archiving of old workflows
-  # archive: false
-  # postgresql:
-  #   host: localhost
-  #   port: 5432
-  #   database: postgres
-  #   tableName: argo_workflows
-  #   # the database secrets must be in the same namespace of the controller
-  #   userNameSecret:
-  #     name: argo-postgres-config
-  #     key: username
-  #   passwordSecret:
-  #     name: argo-postgres-config
-  #     key: password
+  connectionPool:
+    maxIdleConns: 100
+    maxOpenConns: 0
+  # save the entire workflow into etcd and DB
+  nodeStatusOffLoad: false
+  # enable archiving of old workflows
+  archive: true
+  postgresql:
+    host: 10.32.184.1
+    port: 5432
+    database: postgres
+    tableName: argo_workflows
+    # the database secrets must be in the same namespace of the controller
+    userNameSecret:
+      name: argo-postgres-config
+      key: username
+    passwordSecret:
+      name: argo-postgres-config
+      key: password
 
   # -- Default values that will apply to all Workflows from this controller, unless overridden on the Workflow-level.
   # Only valid for 2.7+
