@@ -14,10 +14,14 @@ kubeVersionOverride: ""
 apiVersionOverrides:
   # -- String to override apiVersion of certmanager resources rendered by this helm chart
   certmanager: "" # cert-manager.io/v1
-  # -- String to override apiVersion of ingresses rendered by this helm chart
-  ingress: "" # networking.k8s.io/v1beta1
+  # -- String to override apiVersion of GKE resources rendered by this helm chart
+  cloudgoogle: "" # cloud.google.com/v1
   # -- String to override apiVersion of autoscaling rendered by this helm chart
   autoscaling: "" # autoscaling/v2
+  # -- String to override apiVersion of ingresses rendered by this helm chart
+  ingress: "" # networking.k8s.io/v1beta1
+  # -- String to override apiVersion of pod disruption budgets rendered by this helm chart
+  pdb: "" # policy/v1
 
 # -- Create clusterroles that extend existing clusterroles to interact with argo-cd crds
 ## Ref: https://kubernetes.io/docs/reference/access-authn-authz/rbac/#aggregated-clusterroles
@@ -44,6 +48,10 @@ global:
     tag: ""
     # -- If defined, a imagePullPolicy applied to all Argo CD deployments
     imagePullPolicy: IfNotPresent
+
+  # -- Secrets with credentials to pull images from a private registry
+  imagePullSecrets: []
+
   logging:
     # -- Set the global logging format. Either: `text` or `json`
     format: text
@@ -59,8 +67,6 @@ global:
   #  runAsGroup: 999
   #  fsGroup: 999
 
-  # -- If defined, uses a Secret to pull an image from a private Docker registry or repository
-  imagePullSecrets: []
   # -- Mapping between IP and hostnames that will be injected as entries in the pod's hosts files
   hostAliases: []
   # - ip: 10.20.30.40
@@ -299,10 +305,6 @@ configs:
     ## Generic parameters
     # -- Open-Telemetry collector address: (e.g. "otel-collector:4317")
     otlp.address: ''
-    # -- Time period in seconds for application resync
-    timeout.reconciliation: 180
-    # -- Time period in seconds for application hard resync
-    timeout.hard.reconciliation: 0
 
     ## Controller Properties
     # -- Number of application status processors
@@ -377,6 +379,10 @@ controller:
     # -- Image pull policy for the application controller
     # @default -- `""` (defaults to global.image.imagePullPolicy)
     imagePullPolicy: ""
+
+  # -- Secrets with credentials to pull images from a private registry
+  # @default -- `[]` (defaults to global.imagePullSecrets)
+  imagePullSecrets: []
 
   # -- The number of application controller pods to run.
   # Additional replicas will cause sharding of managed clusters across number of replicas.
@@ -516,6 +522,8 @@ controller:
     name: argocd-application-controller
     # -- Annotations applied to created service account
     annotations: {}
+    # -- Labels applied to created service account
+    labels: {}
     # -- Automount API credentials for the Service Account
     automountServiceAccountToken: true
 
@@ -565,7 +573,7 @@ controller:
       spec: []
       # - alert: ArgoAppMissing
       #   expr: |
-      #     absent(argocd_app_info)
+      #     absent(argocd_app_info) == 1
       #   for: 15m
       #   labels:
       #     severity: critical
@@ -638,8 +646,6 @@ controller:
     # minAvailable: 1
     # maxUnavailable: 0
 
-  # -- Secrets with credentials to pull images from a private registry
-  imagePullSecrets: []
 
 ## Dex
 dex:
@@ -687,10 +693,15 @@ dex:
     # -- Dex image repository
     repository: ghcr.io/dexidp/dex
     # -- Dex image tag
-    tag: v2.32.0
+    tag: v2.35.1-distroless
     # -- Dex imagePullPolicy
     # @default -- `""` (defaults to global.image.imagePullPolicy)
     imagePullPolicy: ""
+
+  # -- Secrets with credentials to pull images from a private registry
+  # @default -- `[]` (defaults to global.imagePullSecrets)
+  imagePullSecrets: []
+
   initImage:
     # -- Argo CD init image repository
     # @default -- `""` (defaults to global.image.repository)
@@ -846,9 +857,6 @@ dex:
     # minAvailable: 1
     # maxUnavailable: 0
 
-  # -- Secrets with credentials to pull images from a private registry
-  imagePullSecrets: []
-
 ## Redis
 redis:
   # -- Enable redis
@@ -860,9 +868,13 @@ redis:
     # -- Redis repository
     repository: public.ecr.aws/docker/library/redis
     # -- Redis tag
-    tag: 7.0.4-alpine
+    tag: 7.0.5-alpine
     # -- Redis imagePullPolicy
     imagePullPolicy: IfNotPresent
+
+  # -- Secrets with credentials to pull images from a private registry
+  # @default -- `[]` (defaults to global.imagePullSecrets)
+  imagePullSecrets: []
 
   # -- Additional command line arguments to pass to redis-server
   extraArgs: []
@@ -1037,9 +1049,6 @@ redis:
     # minAvailable: 1
     # maxUnavailable: 0
 
-  # -- Secrets with credentials to pull images from a private registry
-  imagePullSecrets: []
-
 # This key configures Redis-HA subchart and when enabled (redis-ha.enabled=true)
 # the custom redis deployment is omitted
 # Check the redis-ha chart for more properties
@@ -1069,7 +1078,7 @@ redis-ha:
       enabled: true
   image:
     # -- Redis tag
-    tag: 7.0.4-alpine
+    tag: 7.0.5-alpine
 
   ## https://kubernetes.io/docs/concepts/workloads/pods/pod-topology-spread-constraints/
   topologySpreadConstraints:
@@ -1145,6 +1154,10 @@ server:
     # -- Image pull policy for the Argo CD server
     # @default -- `""` (defaults to global.image.imagePullPolicy)
     imagePullPolicy: "" # IfNotPresent
+
+  # -- Secrets with credentials to pull images from a private registry
+  # @default -- `[]` (defaults to global.imagePullSecrets)
+  imagePullSecrets: []
 
   # -- Additional command line arguments to pass to Argo CD server
   extraArgs: []
@@ -1356,6 +1369,8 @@ server:
     name: argocd-server
     # -- Annotations applied to created service account
     annotations: {}
+    # -- Labels applied to created service account
+    labels: {}
     # -- Automount API credentials for the Service Account
     automountServiceAccountToken: true
 
@@ -1498,6 +1513,7 @@ server:
   config:
     # Argo CD's externally facing base URL (optional). Required when configuring SSO
     url: ""
+
     # Argo CD instance label key
     application.instanceLabelKey: argocd.argoproj.io/instance
 
@@ -1513,6 +1529,14 @@ server:
     # https://argo-cd.readthedocs.io/en/latest/faq/#how-to-disable-admin-user
     admin.enabled: "true"
 
+    # Application reconciliation timeout is the max amount of time required to discover if a new manifests version got
+    # published to the repository. Reconciliation by timeout is disabled if timeout is set to 0. Three minutes by default.
+    timeout.reconciliation: 180s
+
+    # Timeout to refresh application data as well as target manifests cache
+    timeout.hard.reconciliation: "0"
+
+    # Dex configuration
     # dex.config: |
     #   connectors:
     #     # GitHub example
@@ -1525,6 +1549,7 @@ server:
     #         orgs:
     #         - name: your-github-org
 
+    # OIDC configuration as an alternative to dex (optional).
     # oidc.config: |
     #   name: AzureAD
     #   issuer: https://login.microsoftonline.com/TENANT_ID/v2.0
@@ -1690,8 +1715,6 @@ server:
     # minAvailable: 1
     # maxUnavailable: 0
 
-  # -- Secrets with credentials to pull images from a private registry
-  imagePullSecrets: []
 
 ## Repo Server
 repoServer:
@@ -1738,6 +1761,10 @@ repoServer:
     # -- Image pull policy for the repo server
     # @default -- `""` (defaults to global.image.imagePullPolicy)
     imagePullPolicy: "" # IfNotPresent
+
+  # -- Secrets with credentials to pull images from a private registry
+  # @default -- `[]` (defaults to global.imagePullSecrets)
+  imagePullSecrets: []
 
   # -- Additional command line arguments to pass to repo server
   extraArgs: []
@@ -1911,6 +1938,8 @@ repoServer:
     name: "" # "argocd-repo-server"
     # -- Annotations applied to created service account
     annotations: {}
+    # -- Labels applied to created service account
+    labels: {}
     # -- Automount API credentials for the Service Account
     automountServiceAccountToken: true
 
@@ -1927,17 +1956,6 @@ repoServer:
   #     - get
   #     - list
   #     - watch
-
-  # Init container to copy argocd binary
-  copyutil:
-    # -- Resource limits and requests for the copyutil initContainer
-    resources: {}
-    #  limits:
-    #    cpu: 50m
-    #    memory: 64Mi
-    #  requests:
-    #    cpu: 10m
-    #    memory: 32Mi
 
   # -- Init containers to add to the repo server pods
   initContainers: []
@@ -1966,9 +1984,6 @@ repoServer:
     # minAvailable: 1
     # maxUnavailable: 0
 
-  # -- Secrets with credentials to pull images from a private registry
-  imagePullSecrets: []
-
 applicationSet:
   # -- Enable Application Set controller
   enabled: true
@@ -1989,6 +2004,10 @@ applicationSet:
     # -- Image pull policy for the application set controller
     # @default -- `""` (defaults to global.image.imagePullPolicy)
     imagePullPolicy: ""
+
+  # -- If defined, uses a Secret to pull an image from a private Docker registry or repository.
+  # @default -- `[]` (defaults to global.imagePullSecrets)
+  imagePullSecrets: []
 
   args:
     # -- The default metric address
@@ -2049,9 +2068,6 @@ applicationSet:
       # -- Prometheus ServiceMonitor labels
       additionalLabels: {}
 
-  # -- If defined, uses a Secret to pull an image from a private Docker registry or repository.
-  imagePullSecrets: []
-
   ## Application set service configuration
   service:
     # -- Application set service annotations
@@ -2068,6 +2084,8 @@ applicationSet:
     create: true
     # -- Annotations to add to the service account
     annotations: {}
+    # -- Labels applied to created service account
+    labels: {}
     # -- The name of the service account to use.
     # If not set and create is true, a name is generated using the fullname template
     name: ""
@@ -2212,14 +2230,11 @@ notifications:
     imagePullPolicy: ""
 
   # -- Secrets with credentials to pull images from a private registry
+  # @default -- `[]` (defaults to global.imagePullSecrets)
   imagePullSecrets: []
 
   # -- [Node selector]
   nodeSelector: {}
-
-  # -- The deployment strategy to use to replace existing pods with new ones
-  updateStrategy:
-    type: Recreate
 
   # -- Define user-defined context
   ## For more information: https://argocd-notifications.readthedocs.io/en/stable/templates/#defining-user-defined-context
@@ -2262,6 +2277,14 @@ notifications:
 
   # -- Additional container environment variables
   extraEnv: []
+
+  # -- envFrom to pass to the controller
+  # @default -- `[]` (See [values.yaml])
+  extraEnvFrom: []
+    # - configMapRef:
+    #     name: config-map-name
+    # - secretRef:
+    #     name: secret-name
 
   # -- List of extra mounts to add (normally used with extraVolumes)
   extraVolumeMounts: []
@@ -2314,10 +2337,6 @@ notifications:
   # -- Labels to be applied to the controller Pods
   podLabels: {}
 
-  # -- Pod Security Context
-  securityContext:
-    runAsNonRoot: true
-
   # -- Container Security Context
   containerSecurityContext: {}
 
@@ -2344,6 +2363,8 @@ notifications:
     # -- Annotations applied to created service account
     annotations: {}
 
+    # -- Labels applied to created service account
+    labels: {}
   cm:
     # -- Whether helm chart creates controller config map
     create: true
@@ -2647,6 +2668,7 @@ notifications:
         imagePullPolicy: ""
 
       # -- Secrets with credentials to pull images from a private registry
+      # @default -- `[]` (defaults to global.imagePullSecrets)
       imagePullSecrets: []
 
       service:

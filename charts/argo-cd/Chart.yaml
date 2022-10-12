@@ -1,10 +1,13 @@
 apiVersion: v2
-appVersion: v2.4.12
+appVersion: v2.4.14
 description: A Helm chart for Argo CD, a declarative, GitOps continuous delivery tool for Kubernetes.
 name: argo-cd
-version: 5.5.5
+version: 5.5.21
 home: https://github.com/argoproj/argo-helm
 icon: https://argo-cd.readthedocs.io/en/stable/assets/logo.png
+sources:
+  - https://github.com/argoproj/argo-helm/tree/main/charts/argo-cd
+  - https://github.com/argoproj/argo-cd
 keywords:
   - argoproj
   - argocd
@@ -19,4 +22,5 @@ dependencies:
     condition: redis-ha.enabled
 annotations:
   artifacthub.io/changes: |
-    - "[Fixed]: Add missing templating for some service labels"
+    - "[Fixed]: Init container for repo-server should use main container resources"
+    - "[Removed]: Section repoServer.copyutil that is no longer needed"
