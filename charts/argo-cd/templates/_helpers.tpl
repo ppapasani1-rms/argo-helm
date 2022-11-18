@@ -182,9 +182,11 @@ ui.cssurl: "./custom/custom.styles.css"
 Merge Argo Configuration with Preset Configuration
 */}}
 {{- define "argo-cd.config.cm" -}}
-{{- $config := coalesce .Values.server.config (omit .Values.configs.cm "create" "annotations") -}}
+{{- $config := (mergeOverwrite (deepCopy (omit .Values.configs.cm "create" "annotations")) (.Values.server.config | default dict))  -}}
 {{- $preset := include "argo-cd.config.cm.presets" . | fromYaml | default dict -}}
-{{- mergeOverwrite $preset $config | toYaml }}
+{{- range $key, $value := mergeOverwrite $preset $config }}
+{{ $key }}: {{ toString $value | toYaml }}
+{{- end }}
 {{- end -}}
 
 {{/*
@@ -196,7 +198,8 @@ repo.server: "{{ include "argo-cd.repoServer.fullname" . }}:{{ .Values.repoServe
 redis.server: {{ . | quote }}
 {{- end }}
 {{- if .Values.dex.enabled }}
-server.dex.server: {{ include "argo-cd.dex.server" . }}
+server.dex.server: {{ include "argo-cd.dex.server" . | quote }}
+server.dex.server.strict.tls: {{ .Values.dex.certificateSecret.enabled | toString }}
 {{- end }}
 {{- range $component := tuple "controller" "server" "reposerver" }}
 {{ $component }}.log.format: {{ $.Values.global.logging.format | quote }}
@@ -209,8 +212,8 @@ Merge Argo Params Configuration with Preset Configuration
 */}}
 {{- define "argo-cd.config.params" -}}
 {{- $config := omit .Values.configs.params "annotations" }}
-{{- $preset := include "argo-cd.config.params.presets" $ | fromYaml | default dict -}}
+{{- $preset := include "argo-cd.config.params.presets" . | fromYaml | default dict -}}
 {{- range $key, $value := mergeOverwrite $preset $config }}
-{{ $key }}: {{ $value | quote }}
+{{ $key }}: {{ toString $value | toYaml }}
 {{- end }}
 {{- end -}}

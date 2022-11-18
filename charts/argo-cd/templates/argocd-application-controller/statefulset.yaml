@@ -1,16 +1,17 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ template "argo-cd.controller.fullname" . }}
+  name: {{ include "argo-cd.controller.fullname" . }}
   labels:
     {{- include "argo-cd.labels" (dict "context" . "component" .Values.controller.name "name" .Values.controller.name) | nindent 4 }}
 spec:
+  replicas: {{ .Values.controller.replicas }}
+  # TODO: Remove for breaking release as history limit cannot be patched
+  revisionHistoryLimit: 5
+  serviceName: {{ include "argo-cd.controller.fullname" . }}
   selector:
     matchLabels:
       {{- include "argo-cd.selectorLabels" (dict "context" . "name" .Values.controller.name) | nindent 6 }}
-  serviceName: {{ template "argo-cd.controller.fullname" . }}
-  revisionHistoryLimit: 5
-  replicas: {{ .Values.controller.replicas }}
   template:
     metadata:
       annotations:
@@ -81,10 +82,6 @@ spec:
         image: {{ default .Values.global.image.repository .Values.controller.image.repository }}:{{ default (include "argo-cd.defaultTag" .) .Values.controller.image.tag }}
         imagePullPolicy: {{ default .Values.global.image.imagePullPolicy .Values.controller.image.imagePullPolicy }}
         name: {{ .Values.controller.name }}
-        {{- with .Values.controller.containerSecurityContext }}
-        securityContext:
-          {{- toYaml . | nindent 10 }}
-        {{- end }}
         env:
           {{- with .Values.controller.env }}
             {{- toYaml . | nindent 10 }}
@@ -231,15 +228,6 @@ spec:
         - name: metrics
           containerPort: {{ .Values.controller.containerPort }}
           protocol: TCP
-        livenessProbe:
-          httpGet:
-            path: /healthz
-            port: metrics
-          initialDelaySeconds: {{ .Values.controller.livenessProbe.initialDelaySeconds }}
-          periodSeconds: {{ .Values.controller.livenessProbe.periodSeconds }}
-          timeoutSeconds: {{ .Values.controller.livenessProbe.timeoutSeconds }}
-          successThreshold: {{ .Values.controller.livenessProbe.successThreshold }}
-          failureThreshold: {{ .Values.controller.livenessProbe.failureThreshold }}
         readinessProbe:
           httpGet:
             path: /healthz
@@ -251,6 +239,8 @@ spec:
           failureThreshold: {{ .Values.controller.readinessProbe.failureThreshold }}
         resources:
           {{- toYaml .Values.controller.resources | nindent 10 }}
+        securityContext:
+          {{- toYaml .Values.controller.containerSecurityContext | nindent 10 }}
         workingDir: /home/argocd
         volumeMounts:
         {{- with .Values.controller.volumeMounts }}
