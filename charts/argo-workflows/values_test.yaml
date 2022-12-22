@@ -41,6 +41,8 @@ workflow:
   serviceAccount:
     # -- Specifies whether a service account should be created
     create: false
+    # -- Labels applied to created service account
+    labels: {}
     # -- Annotations applied to created service account
     annotations: {}
     # -- Service account which is used to run workflows
@@ -70,6 +72,8 @@ controller:
   rbac:
     # -- Adds Role and RoleBinding for the controller.
     create: true
+    # -- Allows controller to get, list, and watch certain k8s secrets
+    secretWhitelist: []
 
   # -- Limits the maximum number of incomplete workflows in a namespace
   namespaceParallelism:
@@ -179,6 +183,8 @@ controller:
     create: true
     # -- Service account name
     name: ""
+    # -- Labels applied to created service account
+    labels: {}
     # -- Annotations applied to created service account
     annotations: {}
 
@@ -261,6 +267,15 @@ controller:
   tolerations: []
   # -- Assign custom [affinity] rules
   affinity: {}
+
+  # -- Assign custom [TopologySpreadConstraints] rules to the workflow controller
+  ## Ref: https://kubernetes.io/docs/concepts/workloads/pods/pod-topology-spread-constraints/
+  ## If labelSelector is left out, it will default to the labelSelector configuration of the deployment
+  topologySpreadConstraints: []
+  # - maxSkew: 1
+  #   topologyKey: topology.kubernetes.io/zone
+  #   whenUnsatisfiable: DoNotSchedule
+
   # -- Leverage a PriorityClass to ensure your pods survive resource shortages.
   ## ref: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/
   priorityClassName: ""
@@ -276,9 +291,34 @@ controller:
   # -- Extra containers to be added to the controller deployment
   extraContainers: []
 
+  # -- Workflow retention by number of workflows
+  retentionPolicy: {}
+  #  completed: 10
+  #  failed: 3
+  #  errored: 3
+
+  nodeEvents:
+    # -- Enable to emit events on node completion.
+    ## This can take up a lot of space in k8s (typically etcd) resulting in errors when trying to create new events:
+    ## "Unable to create audit event: etcdserver: mvcc: database space exceeded"
+    enabled: true
+
+  # -- Configure when workflow controller runs in a different k8s cluster with the workflow workloads,
+  # or needs to communicate with the k8s apiserver using an out-of-cluster kubeconfig secret.
+  # @default -- `{}` (See [values.yaml])
+  kubeConfig: {}
+    # # name of the kubeconfig secret, may not be empty when kubeConfig specified
+    # secretName: kubeconfig-secret
+    # # key of the kubeconfig secret, may not be empty when kubeConfig specified
+    # secretKey: kubeconfig
+    # # mounting path of the kubeconfig secret, default to /kube/config
+    # mountPath: /kubeconfig/mount/path
+    # # volume name when mounting the secret, default to kubeconfig
+    # volumeName: kube-config-volume
+
 # mainContainer adds default config for main container that could be overriden in workflows template
 mainContainer:
-  # -- imagePullPolicy to apply to Workflow main container
+  # -- imagePullPolicy to apply to Workflow main container. Defaults to `.Values.images.pullPolicy`.
   imagePullPolicy: Always
   # -- Resource limits and requests for the Workflow main container
   resources: {}
@@ -296,6 +336,8 @@ executor:
     repository: argoproj/argoexec
     # -- Image tag for the workflow executor. Defaults to `.Values.images.tag`.
     tag: ""
+    # -- Image PullPolicy to use for the Workflow Executors. Defaults to `.Values.images.pullPolicy`.
+    pullPolicy: ""
   # -- Resource limits and requests for the Workflow Executors
   resources: {}
   # -- Adds environment variables for the executor.
@@ -353,6 +395,8 @@ server:
     create: true
     # -- Service account name
     name: ""
+    # -- Labels applied to created service account
+    labels: {}
     # -- Annotations applied to created service account
     annotations: {}
 
@@ -383,6 +427,14 @@ server:
 
   # -- Assign custom [affinity] rules
   affinity: {}
+
+  # -- Assign custom [TopologySpreadConstraints] rules to the argo server
+  ## Ref: https://kubernetes.io/docs/concepts/workloads/pods/pod-topology-spread-constraints/
+  ## If labelSelector is left out, it will default to the labelSelector configuration of the deployment
+  topologySpreadConstraints: []
+  # - maxSkew: 1
+  #   topologyKey: topology.kubernetes.io/zone
+  #   whenUnsatisfiable: DoNotSchedule
 
   # -- Leverage a PriorityClass to ensure your pods survive resource shortages
   ## ref: https://kubernetes.io/docs/concepts/configuration/pod-priority-preemption/
@@ -496,6 +548,32 @@ server:
   # -- Extra containers to be added to the server deployment
   extraContainers: []
 
+# -- Array of extra K8s manifests to deploy
+extraObjects: []
+  # - apiVersion: secrets-store.csi.x-k8s.io/v1
+  #   kind: SecretProviderClass
+  #   metadata:
+  #     name: argo-server-sso
+  #   spec:
+  #     provider: aws
+  #     parameters:
+  #       objects: |
+  #         - objectName: "argo/server/sso"
+  #           objectType: "secretsmanager"
+  #           jmesPath:
+  #               - path: "client_id"
+  #                 objectAlias: "client_id"
+  #               - path: "client_secret"
+  #                 objectAlias: "client_secret"
+  #     secretObjects:
+  #     - data:
+  #       - key: client_id
+  #         objectName: client_id
+  #       - key: client_secret
+  #         objectName: client_secret
+  #       secretName: argo-server-sso-secrets-store
+  #       type: Opaque
+
 # -- Influences the creation of the ConfigMap for the workflow-controller itself.
 useDefaultArtifactRepo: false
 # -- Use static credentials for S3 (eg. when not using AWS IRSA)
@@ -557,3 +635,26 @@ artifactRepository:
   # accountKeySecret:
   #  name: my-azure-storage-credentials
   #  key: account-access-key
+
+# -- The section of custom artifact repository.
+# Will be added to the config in case useDefaultArtifactRepo is set to false
+customArtifactRepository: {}
+# customArtifactRepository:
+#   archiveLogs: true
+#   artifactory:
+#     repoUrl: https://artifactory.example.com/raw
+#     usernameSecret:
+#       name: artifactory-creds
+#       key: username
+#     passwordSecret:
+#       name: artifactory-creds
+#       key: password
+
+emissary:
+  # -- The command/args for each image on workflow, needed when the command is not specified and the emissary executor is used.
+  ## See more: https://argoproj.github.io/argo-workflows/workflow-executors/#emissary-emissary
+  images: []
+  #  argoproj/argosay:v2:
+  #    cmd: [/argosay]
+  #  docker/whalesay:latest:
+  #    cmd: [/bin/bash]
