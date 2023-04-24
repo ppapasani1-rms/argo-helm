@@ -117,7 +117,7 @@ controller:
         - ALL
   # -- enable persistence using postgres
   persistence:
-    archive: false
+    archive: true
     connectionPool:
       maxIdleConns: 100
       maxOpenConns: 0
