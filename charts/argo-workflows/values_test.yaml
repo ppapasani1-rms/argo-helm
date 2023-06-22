@@ -397,7 +397,7 @@ server:
   # -- Service type for server pods
   serviceType: ClusterIP
   # -- Service port for server
-  servicePort: 2746
+  servicePort: 3001
   # -- Service node port
   serviceNodePort: # 32746
   # -- Service port name
