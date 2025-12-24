@@ -111,8 +111,9 @@ This version reduces history limit for Argo CD deployment replicas to 3 to provi
 
 ### 5.12.0
 
-This version deprecates the `configs.secret.argocdServerTlsConfig` option. Use `server.certificate` or `server.certificateSecret` to provide custom TLS configuration for Argo CD server.
-If you terminate TLS on ingress please use `argocd-server-tls` secret instead of `argocd-secret` secret.
+If Argo CD is managing termination of TLS and you are using `configs.secret.argocdServerTlsConfig` option to provide custom TLS configuration for this chart, please use `server.certificate` or `server.certificateSecret` instead.
+For the secrets for tls termination, please use a secret named `argocd-server-tls` instead of `argocd-secret`.
+For the technical details please check the [Argo CD documentation](https://argo-cd.readthedocs.io/en/stable/operator-manual/tls/#tls-certificates-used-by-argocd-server). When transitioning from the one secret to the other pay attention to `tls.key` and `tls.crt` keys.
 
 ### 5.10.0
 
@@ -359,12 +360,11 @@ NAME: my-release
 | apiVersionOverrides.autoscaling | string | `""` | String to override apiVersion of autoscaling rendered by this helm chart |
 | apiVersionOverrides.certmanager | string | `""` | String to override apiVersion of cert-manager resources rendered by this helm chart |
 | apiVersionOverrides.cloudgoogle | string | `""` | String to override apiVersion of GKE resources rendered by this helm chart |
-| apiVersionOverrides.ingress | string | `""` | String to override apiVersion of ingresses rendered by this helm chart |
-| apiVersionOverrides.pdb | string | `""` | String to override apiVersion of pod disruption budgets rendered by this helm chart |
 | crds.annotations | object | `{}` | Annotations to be added to all CRDs |
 | crds.install | bool | `true` | Install and upgrade CRDs |
 | crds.keep | bool | `true` | Keep CRDs on chart uninstall |
-| createAggregateRoles | bool | `false` | Create clusterroles that extend existing clusterroles to interact with argo-cd crds |
+| createAggregateRoles | bool | `false` | Create aggregated roles that extend existing cluster roles to interact with argo-cd resources |
+| createClusterRoles | bool | `true` | Create cluster roles for cluster-wide installation. |
 | extraObjects | list | `[]` | Array of extra K8s manifests to deploy |
 | fullnameOverride | string | `""` | String to fully override `"argo-cd.fullname"` |
 | kubeVersionOverride | string | `""` | Override the Kubernetes version, which is used to evaluate certain manifests |
@@ -443,6 +443,7 @@ NAME: my-release
 | configs.secret.githubSecret | string | `""` | Shared secret for authenticating GitHub webhook events |
 | configs.secret.gitlabSecret | string | `""` | Shared secret for authenticating GitLab webhook events |
 | configs.secret.gogsSecret | string | `""` | Shared secret for authenticating Gogs webhook events |
+| configs.secret.labels | object | `{}` | Labels to be added to argocd-secret |
 | configs.styles | string | `""` (See [values.yaml]) | Define custom [CSS styles] for your argo instance. This setting will automatically mount the provided CSS and reference it in the argo configuration. |
 | configs.tlsCerts | object | See [values.yaml] | TLS certificate |
 | configs.tlsCertsAnnotations | object | `{}` | TLS certificate configmap annotations |
@@ -453,7 +454,6 @@ NAME: my-release
 |-----|------|---------|-------------|
 | controller.affinity | object | `{}` | Assign custom [affinity] rules to the deployment |
 | controller.args | object | `{}` | DEPRECATED - Application controller commandline flags |
-| controller.clusterAdminAccess.enabled | bool | `true` | Enable RBAC for local cluster deployments |
 | controller.clusterRoleRules.enabled | bool | `false` | Enable custom rules for the application controller's ClusterRole resource |
 | controller.clusterRoleRules.rules | list | `[]` | List of custom rules for the application controller's ClusterRole resource |
 | controller.containerPort | int | `8082` | Application controller listening port |
@@ -531,7 +531,6 @@ NAME: my-release
 | repoServer.certificateSecret.enabled | bool | `false` | Create argocd-repo-server-tls secret |
 | repoServer.certificateSecret.key | string | `""` | Certificate private key |
 | repoServer.certificateSecret.labels | object | `{}` | Labels to be added to argocd-repo-server-tls secret |
-| repoServer.clusterAdminAccess.enabled | bool | `false` | Enable RBAC for local cluster deployments |
 | repoServer.clusterRoleRules.enabled | bool | `false` | Enable custom rules for the Repo server's Cluster Role resource |
 | repoServer.clusterRoleRules.rules | list | `[]` | List of custom rules for the Repo server's Cluster Role resource |
 | repoServer.containerPort | int | `8081` | Configures the repo server port |
@@ -633,7 +632,6 @@ NAME: my-release
 | server.certificateSecret.enabled | bool | `false` | Create argocd-server-tls secret |
 | server.certificateSecret.key | string | `""` | Private Key of the certificate |
 | server.certificateSecret.labels | object | `{}` | Labels to be added to argocd-server-tls secret |
-| server.clusterAdminAccess.enabled | bool | `true` | Enable RBAC for local cluster deployments |
 | server.containerPort | int | `8080` | Configures the server port |
 | server.containerSecurityContext | object | See [values.yaml] | Server container-level security context |
 | server.deploymentAnnotations | object | `{}` | Annotations to be added to server Deployment |
@@ -641,9 +639,9 @@ NAME: my-release
 | server.envFrom | list | `[]` (See [values.yaml]) | envFrom to pass to Argo CD server |
 | server.extensions.containerSecurityContext | object | See [values.yaml] | Server UI extensions container-level security context |
 | server.extensions.enabled | bool | `false` | Enable support for Argo UI extensions |
-| server.extensions.image.imagePullPolicy | string | `"IfNotPresent"` | Image pull policy for extensions |
+| server.extensions.image.imagePullPolicy | string | `""` (defaults to global.image.imagePullPolicy) | Image pull policy for extensions |
 | server.extensions.image.repository | string | `"ghcr.io/argoproj-labs/argocd-extensions"` | Repository to use for extensions image |
-| server.extensions.image.tag | string | `"v0.1.0"` | Tag to use for extensions image |
+| server.extensions.image.tag | string | `"v0.2.1"` | Tag to use for extensions image |
 | server.extensions.resources | object | `{}` | Resource limits and requests for the argocd-extensions container |
 | server.extraArgs | list | `[]` | Additional command line arguments to pass to Argo CD server |
 | server.extraContainers | list | `[]` | Additional containers to be added to the server pod |
@@ -974,6 +972,7 @@ If you want to use an existing Redis (eg. a managed service from a cloud provide
 | applicationSet.image.repository | string | `""` (defaults to global.image.repository) | Repository to use for the ApplicationSet controller |
 | applicationSet.image.tag | string | `""` (defaults to global.image.tag) | Tag to use for the ApplicationSet controller |
 | applicationSet.imagePullSecrets | list | `[]` (defaults to global.imagePullSecrets) | If defined, uses a Secret to pull an image from a private Docker registry or repository. |
+| applicationSet.initContainers | list | `[]` | Init containers to add to the ApplicationSet controller pod |
 | applicationSet.livenessProbe.enabled | bool | `false` | Enable Kubernetes liveness probe for ApplicationSet controller |
 | applicationSet.livenessProbe.failureThreshold | int | `3` | Minimum consecutive failures for the [probe] to be considered failed after having succeeded |
 | applicationSet.livenessProbe.initialDelaySeconds | int | `10` | Number of seconds after the container has started before [probe] is initiated |
@@ -1067,6 +1066,7 @@ If you want to use an existing Redis (eg. a managed service from a cloud provide
 | notifications.deploymentAnnotations | object | `{}` | Annotations to be applied to the notifications controller Deployment |
 | notifications.enabled | bool | `true` | Enable notifications controller |
 | notifications.extraArgs | list | `[]` | Extra arguments to provide to the notifications controller |
+| notifications.extraContainers | list | `[]` | Additional containers to be added to the notifications controller pod |
 | notifications.extraEnv | list | `[]` | Additional container environment variables |
 | notifications.extraEnvFrom | list | `[]` (See [values.yaml]) | envFrom to pass to the notifications controller |
 | notifications.extraVolumeMounts | list | `[]` | List of extra mounts to add (normally used with extraVolumes) |
@@ -1075,6 +1075,7 @@ If you want to use an existing Redis (eg. a managed service from a cloud provide
 | notifications.image.repository | string | `""` (defaults to global.image.repository) | Repository to use for the notifications controller |
 | notifications.image.tag | string | `""` (defaults to global.image.tag) | Tag to use for the notifications controller |
 | notifications.imagePullSecrets | list | `[]` (defaults to global.imagePullSecrets) | Secrets with credentials to pull images from a private registry |
+| notifications.initContainers | list | `[]` | Init containers to add to the notifications controller pod |
 | notifications.logFormat | string | `""` (defaults to global.logging.format) | Notifications controller log format. Either `text` or `json` |
 | notifications.logLevel | string | `""` (defaults to global.logging.level) | Notifications controller log level. One of: `debug`, `info`, `warn`, `error` |
 | notifications.metrics.enabled | bool | `false` | Enables prometheus metrics server |
